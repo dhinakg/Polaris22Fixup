@@ -202,33 +202,6 @@ static void pluginStart() {
     if (error != LiluAPI::Error::NoError) {
         SYSLOG(MODULE_SHORT, "failed to register onPatcherLoad method: %d", error);
     }
-    error = lilu.onKextLoad(kAMDHWLibsInfo, arrsize(kAMDHWLibsInfo), [](void *user, KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size){
-        DBGLOG(MODULE_SHORT, "processing AMDRadeonX4000HWLibs");
-        for (size_t i = 0; i < arrsize(kAMDHWLibsInfo); i++) {
-            if (i == kAmdRadeonX4000 && kAMDHWLibsInfo[i].loadIndex == index) {
-                KernelPatcher::RouteRequest amd_requests[] {
-                    KernelPatcher::RouteRequest("__ZN29AMDRadeonX4000_AMDAccelDevice15getHardwareInfoEP24_sAMD_GET_HW_INFO_VALUES", patched_getHardwareInfo, orig_getHardwareInfo),
-                };
-                if (patcher.routeMultiple(index, amd_requests, address, size, true, true)) {
-                    DBGLOG(MODULE_SHORT, "patched getHardwareInfo");
-                } else {
-                    SYSLOG(MODULE_SHORT, "failed to patch getHardwareInfo: %d", patcher.getError());
-                }
-            } else if (i == kAmdRadeonX4000HwLibs && kAMDHWLibsInfo[i].loadIndex == index) {
-                KernelPatcher::RouteRequest amd_requests[] {
-                    KernelPatcher::RouteRequest("_PECI_IsEarlySAMUInitEnabled", patched_IsEarlySAMUInitEnabled, orig_IsEarlySAMUInitEnabled),
-                };
-                if (patcher.routeMultiple(index, amd_requests, address, size, true, true)) {
-                    DBGLOG(MODULE_SHORT, "patched PECI_IsEarlySAMUInitEnabled");
-                } else {
-                    SYSLOG(MODULE_SHORT, "failed to patch PECI_IsEarlySAMUInitEnabled: %d", patcher.getError());
-                }
-            }
-        }
-    });
-    if (error != LiluAPI::Error::NoError) {
-        SYSLOG(MODULE_SHORT, "failed to register onKextLoad method: %d", error);
-    }
 }
 
 // Boot args.
