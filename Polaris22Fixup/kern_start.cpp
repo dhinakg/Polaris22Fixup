@@ -49,23 +49,7 @@ static const char kDyldCachePath[kPathMaxLen] = "/private/var/db/dyld/dyld_share
 
 static const char kBigSurDyldCachePath[kPathMaxLen] = "/System/Library/dyld/dyld_shared_cache_x86_64h";
 
-static const char *kAmdRadeonX4000HwLibsPath[] { "/System/Library/Extensions/AMDRadeonX4000HWServices.kext/Contents/PlugIns/AMDRadeonX4000HWLibs.kext/Contents/MacOS/AMDRadeonX4000HWLibs" };
-
-static const char *kAmdRadeonX4000Path[] { "/System/Library/Extensions/AMDRadeonX4000.kext/Contents/MacOS/AMDRadeonX4000" };
-
-enum {
-    kAmdRadeonX4000=0,
-    kAmdRadeonX4000HwLibs,
-};
-
-static KernelPatcher::KextInfo kAMDHWLibsInfo[] = {
-    [kAmdRadeonX4000] = { "com.apple.kext.AMDRadeonX4000", kAmdRadeonX4000Path, arrsize(kAmdRadeonX4000Path), {true}, {}, KernelPatcher::KextInfo::Unloaded },
-    [kAmdRadeonX4000HwLibs] = { "com.apple.kext.AMDRadeonX4000HWLibs", kAmdRadeonX4000HwLibsPath, arrsize(kAmdRadeonX4000HwLibsPath), {true}, {}, KernelPatcher::KextInfo::Unloaded },
-};
-
 static mach_vm_address_t orig_cs_validate {};
-static mach_vm_address_t orig_IsEarlySAMUInitEnabled {};
-static mach_vm_address_t orig_getHardwareInfo {};
 
 #pragma mark - Kernel patching code
 
@@ -141,21 +125,6 @@ static void patched_cs_validate_page(vnode_t vp,
     if (vn_getpath(vp, path, &pathlen) == 0) {
         searchAndPatch(data, PAGE_SIZE, path, kBigSurDyldCachePath, kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnOriginal, kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnPatched);
     }
-}
-
-static int patched_IsEarlySAMUInitEnabled(void *ctx) {
-    DBGLOG(MODULE_SHORT, "PECI_IsEarlySAMUInitEnabled: return 0");
-    return 0;
-}
-
-static int patched_getHardwareInfo(void *obj, uint16_t *hwInfo) {
-    int ret = FunctionCast(patched_getHardwareInfo, orig_getHardwareInfo)(obj, hwInfo);
-    DBGLOG(MODULE_SHORT, "AMDRadeonX4000_AMDAccelDevice::getHardwareInfo: return 0x%08X");
-    if (ret == 0) {
-        SYSLOG(MODULE_SHORT, "getHardwareInfo: deviceId = 0x%x", *hwInfo);
-        *hwInfo = kEllesmereDeviceId;
-    }
-    return ret;
 }
 
 #pragma mark - Patches on start/stop
