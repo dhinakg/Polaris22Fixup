@@ -72,11 +72,10 @@ template <size_t patchSize>
 static inline void searchAndPatch(const void *haystack,
                                   size_t haystackSize,
                                   const char (&path)[kPathMaxLen],
-                                  const char (&dylibCachePath)[kPathMaxLen],
                                   const uint8_t (&needle)[patchSize],
                                   const uint8_t (&patch)[patchSize]) {
     if (UNLIKELY(strncmp(path, kSidecarCorePath, sizeof(kSidecarCorePath)) == 0) ||
-        UNLIKELY(strncmp(path, dylibCachePath, sizeof(dylibCachePath)) == 0)) {
+        UNLIKELY(strncmp(path, UserPatcher::getSharedCachePath(), sizeof(UserPatcher::getSharedCachePath())) == 0)) {
         void *res;
         if (UNLIKELY((res = memmem(haystack, haystackSize, needle, patchSize)) != NULL)) {
             SYSLOG(MODULE_SHORT, "found function to patch!");
@@ -101,7 +100,7 @@ static boolean_t patched_cs_validate_range(vnode_t vp,
     int pathlen = kPathMaxLen;
     boolean_t res = FunctionCast(patched_cs_validate_range, orig_cs_validate)(vp, pager, offset, data, size, result);
     if (res && vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, size, path, UserPatcher::getSharedCachePath(), kMacModelOriginal, kMacModelPatched);
+        searchAndPatch(data, size, path, kMacModelOriginal, kMacModelPatched);
     }
     return res;
 }
@@ -118,7 +117,7 @@ static void patched_cs_validate_page(vnode_t vp,
     int pathlen = kPathMaxLen;
     FunctionCast(patched_cs_validate_page, orig_cs_validate)(vp, pager, page_offset, data, arg4, arg5, arg6);
     if (vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, PAGE_SIZE, path, UserPatcher::getSharedCachePath(), kMacModelOriginal, kMacModelPatched);
+        searchAndPatch(data, PAGE_SIZE, path, kMacModelOriginal, kMacModelPatched);
     }
 }
 
