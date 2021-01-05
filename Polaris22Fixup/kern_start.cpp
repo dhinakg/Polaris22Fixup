@@ -7,6 +7,7 @@
 
 #include <Headers/plugin_start.hpp>
 #include <Headers/kern_api.hpp>
+#include <Headers/kern_user.hpp>
 
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define MODULE_SHORT "sidecar"
@@ -100,7 +101,7 @@ static boolean_t patched_cs_validate_range(vnode_t vp,
     int pathlen = kPathMaxLen;
     boolean_t res = FunctionCast(patched_cs_validate_range, orig_cs_validate)(vp, pager, offset, data, size, result);
     if (res && vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, size, path, kDyldCachePath, kMacModelOriginal, kMacModelPatched);
+        searchAndPatch(data, size, path, UserPatcher::getSharedCachePath(), kMacModelOriginal, kMacModelPatched);
     }
     return res;
 }
@@ -117,7 +118,7 @@ static void patched_cs_validate_page(vnode_t vp,
     int pathlen = kPathMaxLen;
     FunctionCast(patched_cs_validate_page, orig_cs_validate)(vp, pager, page_offset, data, arg4, arg5, arg6);
     if (vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, PAGE_SIZE, path, kDyldCachePath, kMacModelOriginal, kMacModelPatched);
+        searchAndPatch(data, PAGE_SIZE, path, UserPatcher::getSharedCachePath(), kMacModelOriginal, kMacModelPatched);
     }
 }
 
