@@ -44,7 +44,7 @@ static inline bool searchAndPatch(const void *haystack,
             SYSLOG(MODULE_SHORT, "found function to patch!");
             SYSLOG(MODULE_SHORT, "path: %s", path);
             bool res = KernelPatcher::findAndReplace(haystack, haystackSize, needle, patchSize, patch, patchSize);
-            SYSLOG(MODULE_SHORT, res ? "patch succeeded" : "patch failed"));
+            SYSLOG(MODULE_SHORT, res ? "patch succeeded" : "patch failed");
             return res;
         }
     }
