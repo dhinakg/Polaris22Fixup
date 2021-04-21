@@ -35,7 +35,7 @@ static inline bool searchAndPatch(const void *haystack,
                                   const char (&path)[kPathMaxLen],
                                   const uint8_t (&needle)[patchSize],
                                   const uint8_t (&patch)[patchSize]) {
-    SYSLOG(MODULE_SHORT, "processing path: %s", path);
+    // SYSLOG(MODULE_SHORT, "processing path: %s", path);
     if (UNLIKELY(strncmp(path, kSidecarCorePath, sizeof(kSidecarCorePath)) == 0) ||
         UNLIKELY(strncmp(path, UserPatcher::getSharedCachePath(), sizeof(UserPatcher::getSharedCachePath())) == 0)) {
         void *res;
