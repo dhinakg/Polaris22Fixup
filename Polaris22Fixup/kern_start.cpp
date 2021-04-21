@@ -28,11 +28,7 @@ static_assert(kMacModelOriginalSize == sizeof(kMacModelPatched), "patch size inv
 
 static const char kSidecarCorePath[kPathMaxLen] = "/System/Library/PrivateFrameworks/SidecarCore.framework/Versions/A/SidecarCore";
 
-static const char kDyldCachePath[kPathMaxLen] = "/private/var/db/dyld/dyld_shared_cache_x86_64h";
-
-static const char kBigSurDyldCachePath[kPathMaxLen] = "/System/Library/dyld/dyld_shared_cache_x86_64h";
-
-static mach_vm_address_t orig_cs_validate {};
+static mach_vm_address_t orig_cs_func {};
 
 #pragma mark - Kernel patching code
 
@@ -42,10 +38,12 @@ static inline bool searchAndPatch(const void *haystack,
                                   const char (&path)[kPathMaxLen],
                                   const uint8_t (&needle)[patchSize],
                                   const uint8_t (&patch)[patchSize]) {
+    SYSLOG(MODULE_SHORT, "processing path: %s", path);
     if (UNLIKELY(strncmp(path, kSidecarCorePath, sizeof(kSidecarCorePath)) == 0) ||
         UNLIKELY(strncmp(path, UserPatcher::getSharedCachePath(), sizeof(UserPatcher::getSharedCachePath())) == 0)) {
         void *res;
         if (UNLIKELY((res = memmem(haystack, haystackSize, needle, patchSize)) != NULL)) {
+            // This is redundant but we just want to print
             SYSLOG(MODULE_SHORT, "found function to patch!");
             SYSLOG(MODULE_SHORT, "path: %s", path);
             SYSLOG(MODULE_SHORT, KernelPatcher::findAndReplace(haystack, haystackSize, needle, patchSize) ? "patch succeeded" : "patch failed");
@@ -65,7 +63,7 @@ static boolean_t patched_cs_validate_range(vnode_t vp,
                                            unsigned *result) {
     char path[kPathMaxLen];
     int pathlen = kPathMaxLen;
-    boolean_t res = FunctionCast(patched_cs_validate_range, orig_cs_validate)(vp, pager, offset, data, size, result);
+    boolean_t res = FunctionCast(patched_cs_validate_range, orig_cs_func)(vp, pager, offset, data, size, result);
     if (res && vn_getpath(vp, path, &pathlen) == 0) {
         searchAndPatch(data, size, path, kMacModelOriginal, kMacModelPatched);
     }
@@ -82,7 +80,7 @@ static void patched_cs_validate_page(vnode_t vp,
                                           int *arg6) {
     char path[kPathMaxLen];
     int pathlen = kPathMaxLen;
-    FunctionCast(patched_cs_validate_page, orig_cs_validate)(vp, pager, page_offset, data, arg4, arg5, arg6);
+    FunctionCast(patched_cs_validate_page, orig_cs_func)(vp, pager, page_offset, data, arg4, arg5, arg6);
     if (vn_getpath(vp, path, &pathlen) == 0) {
         searchAndPatch(data, PAGE_SIZE, path, kMacModelOriginal, kMacModelPatched);
     }
@@ -100,7 +98,7 @@ static void pluginStart() {
             mach_vm_address_t kern = patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_range");
             
             if (patcher.getError() == KernelPatcher::Error::NoError) {
-                orig_cs_validate = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_range), true, true);
+                orig_cs_func = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_range), true, true);
                 
                 if (patcher.getError() != KernelPatcher::Error::NoError) {
                     SYSLOG(MODULE_SHORT, "failed to hook _cs_validate_range");
@@ -117,7 +115,7 @@ static void pluginStart() {
             mach_vm_address_t kern = patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_page");
             
             if (patcher.getError() == KernelPatcher::Error::NoError) {
-                orig_cs_validate = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_page), true, true);
+                orig_cs_func = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_page), true, true);
                 
                 if (patcher.getError() != KernelPatcher::Error::NoError) {
                     SYSLOG(MODULE_SHORT, "failed to hook _cs_validate_page");
