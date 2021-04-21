@@ -9,7 +9,6 @@
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_user.hpp>
 
-#define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define MODULE_SHORT "sidecar"
 
 extern "C" void *memmem(const void *h0, size_t k, const void *n0, size_t l);
@@ -18,25 +17,14 @@ static const int kPathMaxLen = 1024;
 
 #pragma mark - Patches
 
-static const uint8_t kMacModelOriginal[] = "MacPro6,1";
+// static const uint8_t kMacModelOriginal[] = "MacPro6,1";
+// static const uint8_t kMacModelPatched[] = "MacPro7,1";
 
-static const uint8_t kMacModelPatched[] = "MacPro7,1";
+static const uint8_t kMacModelOriginal[] = {0x4D, 0x61, 0x63, 0x6D, 0x69, 0x6E, 0x69, 0x37, 0x2C, 0x31, 0x00, 0x4D, 0x61, 0x63, 0x50, 0x72, 0x6F, 0x35, 0x2C, 0x31, 0x00, 0x4D, 0x61, 0x63, 0x50, 0x72, 0x6F, 0x36, 0x2C, 0x31};
+static const uint8_t kMacModelPatched[]  = {0x4D, 0x61, 0x63, 0x6D, 0x69, 0x6E, 0x69, 0x37, 0x2C, 0x31, 0x00, 0x4D, 0x61, 0x63, 0x50, 0x72, 0x6F, 0x35, 0x2C, 0x31, 0x00, 0x4D, 0x61, 0x63, 0x50, 0x72, 0x6F, 0x37, 0x2C, 0x31};
 
 static constexpr size_t kMacModelOriginalSize = sizeof(kMacModelOriginal);
-
 static_assert(kMacModelOriginalSize == sizeof(kMacModelPatched), "patch size invalid");
-
-/* static const uint8_t kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnOriginal[] = {
-    0xb9, 0x02, 0x00, 0x00, 0x00, 0x01, 0xc8, 0x41, 0x83, 0xf8, 0x21, 0x0f, 0x42, 0xc1, 0xeb,
-};
-
-static const uint8_t kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnPatched[] = {
-    0xb9, 0x02, 0x00, 0x00, 0x00, 0x01, 0xc8, 0x41, 0x83, 0xf8, 0x00, 0x0f, 0x43, 0xc1, 0xeb,
-};
-
-static constexpr size_t kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnSize = sizeof(kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnOriginal);
-
-static_assert(kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnSize == sizeof(kBigSurAmdBronzeMtlAddrLibGetBaseArrayModeReturnPatched), "patch size invalid"); */
 
 static const char kSidecarCorePath[kPathMaxLen] = "/System/Library/PrivateFrameworks/SidecarCore.framework/Versions/A/SidecarCore";
 
@@ -47,26 +35,6 @@ static const char kBigSurDyldCachePath[kPathMaxLen] = "/System/Library/dyld/dyld
 static mach_vm_address_t orig_cs_validate {};
 
 #pragma mark - Kernel patching code
-
-/**
- * Call block with interrupts and protections disabled
- */
-static void doKernelPatch(void (^patchFunc)(void)) {
-    if (MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) == KERN_SUCCESS) {
-        DBGLOG(MODULE_SHORT, "obtained write permssions");
-    } else {
-        SYSLOG(MODULE_SHORT, "failed to obtain write permissions");
-        return;
-    }
-    
-    patchFunc();
-    
-    if (MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock) == KERN_SUCCESS) {
-        DBGLOG(MODULE_SHORT, "restored write permssions");
-    } else {
-        SYSLOG(MODULE_SHORT, "failed to restore write permissions");
-    }
-}
 
 template <size_t patchSize>
 static inline bool searchAndPatch(const void *haystack,
@@ -80,10 +48,7 @@ static inline bool searchAndPatch(const void *haystack,
         if (UNLIKELY((res = memmem(haystack, haystackSize, needle, patchSize)) != NULL)) {
             SYSLOG(MODULE_SHORT, "found function to patch!");
             SYSLOG(MODULE_SHORT, "path: %s", path);
-            doKernelPatch(^{
-                lilu_os_memcpy(res, patch, patchSize);
-            });
-            return true;
+            SYSLOG(MODULE_SHORT, KernelPatcher::findAndReplace(haystack, haystackSize, needle, patchSize) ? "patch succeeded" : "patch failed");
         }
     }
     return false;
