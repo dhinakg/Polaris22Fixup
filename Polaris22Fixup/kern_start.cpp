@@ -36,24 +36,17 @@ static inline bool searchAndPatch(const void *haystack,
                                   const uint8_t (&needle)[patchSize],
                                   const uint8_t (&patch)[patchSize]) {
     // SYSLOG(MODULE_SHORT, "processing path: %s", path);
+    bool result = false;
     if (UNLIKELY(strncmp(path, kSidecarCorePath, sizeof(kSidecarCorePath)) == 0) ||
         UNLIKELY(strncmp(path, UserPatcher::getSharedCachePath(), sizeof(UserPatcher::getSharedCachePath())) == 0)) {
-        void *res;
-        if (UNLIKELY((res = memmem(haystack, haystackSize, needle, patchSize)) != NULL)) {
-            // This is redundant but we just want to print
-            SYSLOG(MODULE_SHORT, "found function to patch!");
-            SYSLOG(MODULE_SHORT, "path: %s", path);
-            bool result = KernelPatcher::findAndReplace(const_cast<void *>(haystack), haystackSize, needle, patchSize, patch, patchSize);
+            result = KernelPatcher::findAndReplace(const_cast<void *>(haystack), haystackSize, needle, patchSize, patch, patchSize);
             if (result) {
                 SYSLOG(MODULE_SHORT, "patch succeeded");
             } else {
                 SYSLOG(MODULE_SHORT, "patch failed");
             }
-            
-            return res;
-        }
     }
-    return false;
+    return result;
 }
 
 #pragma mark - Patched functions
