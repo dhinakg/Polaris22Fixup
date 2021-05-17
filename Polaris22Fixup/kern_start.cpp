@@ -9,21 +9,24 @@
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_user.hpp>
 
-#define MODULE_SHORT "sidecar"
-
-extern "C" void *memmem(const void *h0, size_t k, const void *n0, size_t l);
+#define MODULE_SHORT "rootkit"
 
 static const int kPathMaxLen = 1024;
 
 #pragma mark - Patches
 
-static const uint8_t kSLSSetMenuBarsOriginal[] = {0x55, 0x48, 0x89, 0xE5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x50, 0xB8, 0x98, 0x1A, 0x00, 0x00, 0xE8, 0xF7, 0x2E, 0x19, 0x00};
-static const uint8_t kSLSSetMenuBarsPatched[]  = {0xC3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+static const uint8_t kDisableSnapshotPatch1[] = {0x41,0x89,0xD1,0x48,0x89,0xF2,0x89,0xFE,0xBF,0x01,0x00,0x00,0x00,0x31,0xC9,0x45,0x31,0xC0,0xE9,0x17,0x28,0x01,0x00};
+static const uint8_t kDisableSnapshotPatch2[] = {0x41,0x89,0xD1,0x48,0x89,0xF2,0x89,0xFE,0xBF,0x06,0x00,0x00,0x00,0x31,0xC9,0x45,0x31,0xC0,0xE9,0xBA,0x27,0x01,0x00};
 
-static constexpr size_t kSLSSetMenuBarsOriginalSize = sizeof(kSLSSetMenuBarsOriginal);
-static_assert(kSLSSetMenuBarsOriginalSize == sizeof(kSLSSetMenuBarsPatched), "patch size invalid");
+static const uint8_t kDisableSnapshotPatched[] = {0x41,0x89,0xD1,0x48,0x89,0xF2,0x89,0xFE,0xBF,0x01,0x00,0x00,0x00,0x31,0xC9,0x45,0x31,0xC0,0xE9,0x17,0x28,0x01,0x00};
 
-static const char kSidecarCorePath[kPathMaxLen] = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/SkyLight";
+static constexpr size_t kDisableSnapshotPatch1Size = sizeof(kDisableSnapshotPatch1);
+static constexpr size_t kDisableSnapshotPatch2Size = sizeof(kDisableSnapshotPatch2);
+
+static_assert(kDisableSnapshotPatch1Size == sizeof(kDisableSnapshotPatched), "patch 1 size invalid");
+static_assert(kDisableSnapshotPatch2Size == sizeof(kDisableSnapshotPatched), "patch 2 size invalid");
+
+static const char libSystemPath[kPathMaxLen] = "/usr/lib/system/libsystem_kernel.dylib";
 
 static mach_vm_address_t orig_cs_func {};
 
@@ -37,7 +40,7 @@ static inline bool searchAndPatch(const void *haystack,
                                   const uint8_t (&patch)[patchSize]) {
     // SYSLOG(MODULE_SHORT, "processing path: %s", path);
     bool result = false;
-    if (UNLIKELY(strncmp(path, kSidecarCorePath, sizeof(kSidecarCorePath)) == 0) ||
+    if (UNLIKELY(strncmp(path, libSystemPath, sizeof(libSystemPath)) == 0) ||
         UNLIKELY(strncmp(path, UserPatcher::getSharedCachePath(), sizeof(UserPatcher::getSharedCachePath())) == 0)) {
             result = KernelPatcher::findAndReplace(const_cast<void *>(haystack), haystackSize, needle, patchSize, patch, patchSize);
             if (result) {
@@ -62,7 +65,8 @@ static boolean_t patched_cs_validate_range(vnode_t vp,
     int pathlen = kPathMaxLen;
     boolean_t res = FunctionCast(patched_cs_validate_range, orig_cs_func)(vp, pager, offset, data, size, result);
     if (res && vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, size, path, kSLSSetMenuBarsOriginal, kSLSSetMenuBarsPatched);
+        searchAndPatch(data, size, path, kDisableSnapshotPatch1, kDisableSnapshotPatched);
+        searchAndPatch(data, size, path, kDisableSnapshotPatch2, kDisableSnapshotPatched);
     }
     return res;
 }
@@ -79,7 +83,8 @@ static void patched_cs_validate_page(vnode_t vp,
     int pathlen = kPathMaxLen;
     FunctionCast(patched_cs_validate_page, orig_cs_func)(vp, pager, page_offset, data, arg4, arg5, arg6);
     if (vn_getpath(vp, path, &pathlen) == 0) {
-        searchAndPatch(data, PAGE_SIZE, path, kSLSSetMenuBarsOriginal, kSLSSetMenuBarsPatched);
+        searchAndPatch(data, PAGE_SIZE, path, kDisableSnapshotPatch1, kDisableSnapshotPatched);
+        searchAndPatch(data, PAGE_SIZE, path, kDisableSnapshotPatch2, kDisableSnapshotPatched);
     }
 }
 
@@ -89,24 +94,24 @@ static void pluginStart() {
     LiluAPI::Error error;
     
     SYSLOG(MODULE_SHORT, "start");
-    if (getKernelVersion() < KernelVersion::BigSur) {
-        error = lilu.onPatcherLoad([](void *user, KernelPatcher &patcher){
-            SYSLOG(MODULE_SHORT, "patching cs_validate_range");
-            mach_vm_address_t kern = patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_range");
-            
-            if (patcher.getError() == KernelPatcher::Error::NoError) {
-                orig_cs_func = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_range), true, true);
-                
-                if (patcher.getError() != KernelPatcher::Error::NoError) {
-                    SYSLOG(MODULE_SHORT, "failed to hook _cs_validate_range");
-                } else {
-                    SYSLOG(MODULE_SHORT, "hooked cs_validate_range");
-                }
-            } else {
-                SYSLOG(MODULE_SHORT, "failed to find _cs_validate_range");
-            }
-        });
-    } else { // >= macOS 11
+    // if (getKernelVersion() < KernelVersion::BigSur) {
+    //     error = lilu.onPatcherLoad([](void *user, KernelPatcher &patcher){
+    //         SYSLOG(MODULE_SHORT, "patching cs_validate_range");
+    //         mach_vm_address_t kern = patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_range");
+    //         
+    //         if (patcher.getError() == KernelPatcher::Error::NoError) {
+    //             orig_cs_func = patcher.routeFunctionLong(kern, reinterpret_cast<mach_vm_address_t>(patched_cs_validate_range), true, true);
+    //             
+    //             if (patcher.getError() != KernelPatcher::Error::NoError) {
+    //                 SYSLOG(MODULE_SHORT, "failed to hook _cs_validate_range");
+    //             } else {
+    //                 SYSLOG(MODULE_SHORT, "hooked cs_validate_range");
+    //             }
+    //         } else {
+    //             SYSLOG(MODULE_SHORT, "failed to find _cs_validate_range");
+    //         }
+    //     });
+    // } else { // >= macOS 11
         error = lilu.onPatcherLoad([](void *user, KernelPatcher &patcher){
             SYSLOG(MODULE_SHORT, "patching cs_validate_page");
             mach_vm_address_t kern = patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_page");
@@ -123,7 +128,7 @@ static void pluginStart() {
                 SYSLOG(MODULE_SHORT, "failed to find _cs_validate_page");
             }
         });
-    }
+    // }
     if (error != LiluAPI::Error::NoError) {
         SYSLOG(MODULE_SHORT, "failed to register onPatcherLoad method: %d", error);
     }
@@ -131,13 +136,13 @@ static void pluginStart() {
 
 // Boot args.
 static const char *bootargOff[] {
-    "-polaris22off"
+    "-rootkitoff"
 };
 static const char *bootargDebug[] {
-    "-polaris22dbg"
+    "-rootkitdbg"
 };
 static const char *bootargBeta[] {
-    "-polaris22beta"
+    "-rootkitbeta"
 };
 
 // Plugin configuration.
@@ -151,7 +156,7 @@ PluginConfiguration ADDPR(config) {
     arrsize(bootargDebug),
     bootargBeta,
     arrsize(bootargBeta),
-    KernelVersion::Catalina,
+    KernelVersion::BigSur,
     KernelVersion::BigSur,
     pluginStart
 };
