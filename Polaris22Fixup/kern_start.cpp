@@ -15,9 +15,9 @@ static const int kPathMaxLen = 1024;
 
 #pragma mark - Patches
 
-static const uint8_t kDisableSnapshotPatch1[] = { 0x31, 0xC0, 0x41, 0x83, 0xFD, 0xFF, 0x0F, 0x94, 0xC0, 0x8D, 0x0C, 0x40, 0x83, 0xC1, 0x0A };
+static const uint8_t kDisableSnapshotPatch1[] = "/etc/bluetool/%s.%s.script";
 
-static const uint8_t kDisableSnapshotPatched[] = { 0x31, 0xC0, 0x41, 0x83, 0xFD, 0xFF, 0x0F, 0x94, 0xC0, 0x8D, 0x0C, 0x40, 0x90, 0x90, 0x90 };
+static const uint8_t kDisableSnapshotPatched[] = "/System/.localized\0\0\0\0\0\0\0\0";
 
 static constexpr size_t kDisableSnapshotPatch1Size = sizeof(kDisableSnapshotPatch1);
 
