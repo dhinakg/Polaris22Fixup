@@ -15,9 +15,9 @@ static const int kPathMaxLen = 1024;
 
 #pragma mark - Patches
 
-static const uint8_t kDisableSnapshotPatch1[] = "/etc/bluetool/%s.%s.script";
+static const uint8_t kDisableSnapshotPatch1[] = "/etc/bluetool/SkipBluetoothAutomaticFirmwareUpdate";
 
-static const uint8_t kDisableSnapshotPatched[] = "/System/.localized\0\0\0\0\0\0\0\0";
+static const uint8_t kDisableSnapshotPatched[] = "/System/Library/CoreServices/boot.efi\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
 static constexpr size_t kDisableSnapshotPatch1Size = sizeof(kDisableSnapshotPatch1);
 
